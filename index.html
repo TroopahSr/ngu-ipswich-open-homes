@@ -25,6 +25,20 @@
 @font-face{font-family:"Inter";font-style:normal;font-weight:400 700;font-display:swap;
   src:url("fonts/inter-latin-ext.woff2") format("woff2");
   unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF}
+
+/* reviews carousel: native horizontal scroll so the phone handles left/right vs up/down itself */
+.rv-wrap{position:relative;margin-top:32px}
+.rv-track{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding:0 max(22px,calc((100vw - 1036px)/2));padding:4px max(22px,calc((100vw - 1036px)/2)) 12px;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y}
+.rv-track::-webkit-scrollbar{display:none}
+.rv-track:focus{outline:none}
+.rv{flex:0 0 min(84vw,340px);scroll-snap-align:start;margin:0;background:#fff;border-radius:22px;padding:22px 24px;text-align:left;display:flex;flex-direction:column}
+.rv-stars{color:#1d1d1f;font-size:14px;letter-spacing:2px;margin:0 0 10px}
+.rv blockquote{margin:0;font-size:16px;line-height:1.5;flex:1}
+.rv figcaption{color:var(--sub);font-size:14px;margin-top:14px}
+.rv-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:40px;height:40px;border:0;border-radius:50%;background:rgba(255,255,255,.95);font-size:22px;line-height:1;color:#111;box-shadow:0 2px 10px rgba(0,0,0,.14);cursor:pointer;display:grid;place-items:center;padding:0 0 2px}
+.rv-nav.prev{left:10px}.rv-nav.next{right:10px}.rv-nav[hidden]{display:none}
+@media(hover:none){.rv-nav{display:none}}
+.rv-count{text-align:center;color:var(--sub);font-size:13px;margin-top:10px;font-variant-numeric:tabular-nums}
 </style>
 
 
@@ -578,16 +592,32 @@ header.top:not(.scrolled){border-bottom-color:transparent;background:rgba(255,25
 
   <section class="sec" id="reviews">
     <div class="wrap quote">
-      <p class="stars" role="img" aria-label="5 out of 5 stars">★★★★★</p>
-      <blockquote>“Leigh kept us informed of what was happening, next steps at each milestone and was extremely knowledgeable of the industry and market conditions.”</blockquote>
-      <p class="who">Seller, Flinders View</p>
-      <div class="minis">
-        <figure><blockquote>“We have just bought our first home through Leigh and he has made it the smoothest, most stress free experience ever.”</blockquote><figcaption>Buyer, Brassall</figcaption></figure>
-        <figure><blockquote>“We were never left guessing, Leigh consistently kept us in the loop with prompt updates, clear feedback after open homes, and honest advice every step of the way.”</blockquote><figcaption>Seller, Lowood</figcaption></figure>
-        <figure><blockquote>“Leigh was a pleasure to work with. He even answered a pocket dial at 530am.”</blockquote><figcaption>Seller, Bundamba</figcaption></figure>
-      </div>
-      <p class="who" style="margin-top:24px"><span style="display:inline-block">4.8 from 16 reviews.</span> <a class="link" href="https://www.realestate.com.au/agent/leigh-johnson-3658768" target="_blank" rel="noopener" aria-label="Read them on realestate.com.au (opens in a new tab)">Read them on realestate.com.au ›</a></p>
+      <p class="stars" role="img" aria-label="4.8 out of 5 stars">★★★★★</p>
+      <h2 class="h2" style="margin-top:6px">4.8 from 16 reviews.</h2>
+      <p class="who">Verified reviews on <a class="link" href="https://www.realestate.com.au/agent/leigh-johnson-3658768" target="_blank" rel="noopener">realestate.com.au</a>. Swipe to read more.</p>
     </div>
+    <div class="rv-wrap">
+      <div class="rv-track" id="rv-track" tabindex="0" role="group" aria-label="Client reviews, swipe for more">
+          <figure class="rv"><p class="rv-stars" aria-label="5 out of 5 stars">★★★★★</p><blockquote>“Highly recommend Leigh and team NGU. Leigh went above and beyond to keep me informed on every step. Selling a deceased estate was one of the mentally hardest things I've had to do, and Leigh made it so much easier with care and attention. He was patient with me and understood my need to work around my job schedule. He truely is someone I trusted with the selling process, and would use again if I ever need to sell or buy. Thank you”</blockquote><figcaption>Seller of house in Lowood, QLD</figcaption></figure>
+          <figure class="rv"><p class="rv-stars" aria-label="5 out of 5 stars">★★★★★</p><blockquote>“Working with Leigh Johnson from NGU Real Estate was an absolute pleasure from start to finish. From day one, Leigh demonstrated a high level of professionalism, deep market knowledge, and a genuine dedication to getting us the highest sale in our complex. What stood out to us most was Leigh's ability to conduct communication for all. We were never left guessing, Leigh consistently kept us in the loop with prompt updates, clear feedback after open homes, and honest advice every step of the way.”</blockquote><figcaption>Seller of house in Lowood, QLD</figcaption></figure>
+          <figure class="rv"><p class="rv-stars" aria-label="5 out of 5 stars">★★★★★</p><blockquote>“From start to finish, Leigh was friendly, professional and always willing to help with any questions I had regarding the property. I am extremely grateful for all his help, and would definitely seek help/guidance from him for future purchases and investments. Couldn’t be more happier with his services. Cheers Leigh!”</blockquote><figcaption>Buyer of house in Eastern Heights, QLD</figcaption></figure>
+          <figure class="rv"><p class="rv-stars" aria-label="5 out of 5 stars">★★★★★</p><blockquote>“Leigh from NGU real estate was very helpful in every aspect of my purchase, nothing was too much trouble. He was friendly and easy to talk to. Kept in contact to make sure we were ok and to give advice. He was great to do business with.”</blockquote><figcaption>Buyer of house in Moores Pocket, QLD</figcaption></figure>
+          <figure class="rv"><p class="rv-stars" aria-label="5 out of 5 stars">★★★★★</p><blockquote>“Leigh has been absolutely phenomenal the entire buying process for my partner and I. We have just bought our first home through Leigh and he has made it the smoothest, most stress free experience ever. We are so grateful to have been working with him. We will be recommending all our family and friends to go with Leigh! Thank you again sooo much!”</blockquote><figcaption>Buyer of house in Brassall, QLD</figcaption></figure>
+          <figure class="rv"><p class="rv-stars" aria-label="5 out of 5 stars">★★★★★</p><blockquote>“Leigh is a professional, hardworking, personable agent. His commitment is second to none and he goes the extra mile. He communicated every step of the way in the selling process and went above and beyond for us. Highly recommend Leigh- extremely satisfied with the price we received and with Leigh's professionalism.”</blockquote><figcaption>Seller of house in Brassall, QLD</figcaption></figure>
+          <figure class="rv"><p class="rv-stars" aria-label="5 out of 5 stars">★★★★★</p><blockquote>“To Leigh, Corey and the NGU team, looking after their client is the number 1 priority and we feel very lucky to have them represent us in the sale of our home. They know their market very well. We have no hesitation in recommending them to anyone buying or selling their home.”</blockquote><figcaption>Seller of house in Bundamba, QLD</figcaption></figure>
+          <figure class="rv"><p class="rv-stars" aria-label="5 out of 5 stars">★★★★★</p><blockquote>“Leigh was a pleasure to work with. He even answered a pocket dial at 530am. Quick responses and all my task requirements were completed quickly and professionally.”</blockquote><figcaption>Seller of house in Bundamba, QLD</figcaption></figure>
+          <figure class="rv"><p class="rv-stars" aria-label="5 out of 5 stars">★★★★★</p><blockquote>“Leigh kept us informed of what was happening, next steps at each milestone and was extremely knowledgeable of the industry and market conditions. He also looked after the property given we were out of area. Leigh marketed the property slightly above other agents stating the market movement and justifying his research.”</blockquote><figcaption>Seller of house in Flinders View, QLD</figcaption></figure>
+          <figure class="rv"><p class="rv-stars" aria-label="5 out of 5 stars">★★★★★</p><blockquote>“Leigh was good had lots of knowledge of the area and was very professional”</blockquote><figcaption>Seller of unit in Bundamba, QLD</figcaption></figure>
+          <figure class="rv"><p class="rv-stars" aria-label="5 out of 5 stars">★★★★★</p><blockquote>“Had a great experience buying our property through Leigh, Thank you for making the whole process so easy for us!”</blockquote><figcaption>Buyer of house in Redbank Plains, QLD</figcaption></figure>
+          <figure class="rv"><p class="rv-stars" aria-label="5 out of 5 stars">★★★★★</p><blockquote>“It was a pleasure dealing with Leigh. He is dedicated and focused in his profesion. We had great communication throughout the process of purchasing the property. He handles the whole deal with experience that makes everything flow smoothly. Highly recomend him.”</blockquote><figcaption>Buyer of house in Redbank Plains, QLD</figcaption></figure>
+          <figure class="rv"><p class="rv-stars" aria-label="5 out of 5 stars">★★★★★</p><blockquote>“Easy, simple and effective. Leigh and Matt worked quickly to sell my property at a great price for a great rate. Both were very personable and genuine. They didn’t muck around or waste money on things I didn’t need like flyers or videos. Both were very knowledgeable of the Ipswich area.”</blockquote><figcaption>Seller of house in Bundamba, QLD</figcaption></figure>
+          <figure class="rv"><p class="rv-stars" aria-label="5 out of 5 stars">★★★★★</p><blockquote>“Hardworking, excellent communication and coordination, fair way do things.”</blockquote><figcaption>Buyer of house in Redbank Plains, QLD</figcaption></figure>
+          <figure class="rv"><p class="rv-stars" aria-label="5 out of 5 stars">★★★★★</p><blockquote>“Leigh worked tirelessly to deliver above and beyond our expectations. As a vendor I already had a predetermined path to market planned. However a novel idea by Leigh just in the nick of time unlocked an alternative path to sales success. And the good thing from a vendor's perspective, the idea was a short term, cost free, and ultimately pain free approach. Leigh delivered on price expectation, while saving months off the sales process. Benchmark service provided, benchmark price achieved!”</blockquote><figcaption>Seller of house in Springfield Lakes, QLD</figcaption></figure>
+      </div>
+      <button type="button" class="rv-nav prev" aria-label="Previous review" hidden>‹</button><button type="button" class="rv-nav next" aria-label="Next review">›</button>
+    </div>
+    <p class="rv-count" id="rv-count" aria-live="polite">1 / 15</p>
+    <p class="who" style="text-align:center;margin-top:8px"><a class="link" href="https://www.realestate.com.au/agent/leigh-johnson-3658768" target="_blank" rel="noopener" aria-label="Read all reviews on realestate.com.au (opens in a new tab)">Read them on realestate.com.au ›</a></p>
   </section>
 
   <section class="sec">
@@ -1639,6 +1669,15 @@ setTimeout(()=>revealAll(document),50);
 renderFS();renderOH();route();
 const _hyd=()=>hydrateCardPhotos(document);
 if("requestIdleCallback" in window)requestIdleCallback(_hyd,{timeout:400});else setTimeout(_hyd,0);
+</script>
+
+<script>
+(function(){const t=document.getElementById("rv-track");if(!t)return;const w=t.parentNode,prev=w.querySelector(".rv-nav.prev"),next=w.querySelector(".rv-nav.next"),c=document.getElementById("rv-count"),n=t.children.length;
+const step=()=>{const a=t.children[0],b=t.children[1];return b?b.offsetLeft-a.offsetLeft:t.clientWidth};
+const sync=()=>{const i=Math.round(t.scrollLeft/step());c.textContent=Math.min(n,i+1)+" / "+n;prev.hidden=t.scrollLeft<4;next.hidden=t.scrollLeft+t.clientWidth>=t.scrollWidth-4};
+t.addEventListener("scroll",()=>requestAnimationFrame(sync),{passive:true});addEventListener("resize",sync);
+prev.addEventListener("click",()=>t.scrollBy({left:-step(),behavior:"smooth"}));next.addEventListener("click",()=>t.scrollBy({left:step(),behavior:"smooth"}));
+t.addEventListener("keydown",e=>{if(e.key==="ArrowRight"){e.preventDefault();next.click()}if(e.key==="ArrowLeft"){e.preventDefault();prev.click()}});sync()})();
 </script>
 </body>
 </html>
