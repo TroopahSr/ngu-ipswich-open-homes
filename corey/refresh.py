@@ -1,0 +1,459 @@
+#!/usr/bin/env python3
+"""Refresh /corey listings, sales and photos from public sources.
+
+Current listings and sold results are Corey Athanates' own public record:
+- For sale: view.com.au agent 155962 (on-market), photos from NGU Rex when the
+  listing is on ngurealestate.com.au.
+- Sold: view.com.au sold dates and prices for the last 24 months, plus the
+  Burgess Street sale that is on his second View profile and on NGU.
+  Photos reuse Leigh's approach: Rex CDN originals (about 1200x900) in the
+  viewer and _800x600 on the card.
+
+Does not touch the site root or /guide. Safe to re-run; it rewrites only the
+marked Corey data blocks inside corey/index.html.
+"""
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+from pathlib import Path
+from urllib.request import Request, urlopen
+
+ROOT = Path(__file__).resolve().parent
+HTML_PATH = ROOT / "index.html"
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+CHECKED = "7 November 2026"
+WINDOW_START = "2024-11-07"  # 24 months before 7 Nov 2026
+VIEW_AGENT = "155962"
+NGU_SEARCH = "https://ngurealestate.com.au/listings?status=all&saleOrRental=Sale&sortby=dateListed-desc&agent=corey-athanates&page={}"
+
+def fetch(url: str, retries: int = 3) -> str:
+    last = None
+    for i in range(retries):
+        try:
+            req = Request(url, headers={"User-Agent": UA, "Accept": "text/html,application/json"})
+            with urlopen(req, timeout=45) as r:
+                return r.read().decode("utf-8", "replace")
+        except Exception as e:
+            last = e
+            time.sleep(0.8 * (i + 1))
+    raise last
+
+def view_listings(agent: str, method: str) -> list:
+    url = f"https://view.com.au/api/pubui/v2/find-agent/agent-listings?agentId={agent}&saleMethod={method}&page=1&size=100"
+    data = json.loads(fetch(url))
+    return data["data"]["listings"]
+
+def ngu_links() -> list[str]:
+    links, seen, page = [], set(), 1
+    while page <= 20:
+        raw = fetch(NGU_SEARCH.format(page))
+        found = sorted(set(re.findall(r'href="(/listings/residential_[^"#?]+)"', raw)))
+        new = [l for l in found if l not in seen]
+        if not new:
+            break
+        seen.update(new)
+        links.extend(new)
+        if not re.search(rf"page={page+1}\b", raw):
+            break
+        page += 1
+        time.sleep(0.2)
+    return links
+
+def clean_ngu_address(addr: str) -> tuple[str, str] | None:
+    if not addr:
+        return None
+    addr = re.sub(r"^(000|100|500)\s+(?=\d)", "", addr.strip())
+    addr = re.sub(r"\s+QLD\s+\d{4}$", "", addr, flags=re.I)
+    if "," not in addr:
+        return None
+    street, suburb = [p.strip() for p in addr.split(",", 1)]
+    suburb = re.sub(r"\bqld\b.*", "", suburb, flags=re.I).strip()
+    return street, suburb
+
+def norm_key(street: str, suburb: str):
+    s = street.lower().replace("&", " and ").replace("south station", "s station")
+    s = re.sub(r"[^a-z0-9/ ]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    m = re.match(r"(?:(\d+)\s*/\s*)?(\d+[a-z]?)\s+(.+)", s)
+    if not m:
+        return None
+    rest = m.group(3)
+    rest = re.sub(r"\b(street|st|road|rd|court|ct|drive|dr|avenue|ave|crescent|cres|parade|pde|place|pl|close|cl|way|terrace|tce|circuit|cct)\b", " ", rest)
+    rest = re.sub(r"\s+", " ", rest).strip()
+    return (m.group(1) or "", m.group(2), rest, suburb.lower().strip())
+
+def title_words(s: str) -> str:
+    out = []
+    for w in s.split():
+        if w.isalpha():
+            out.append(w.capitalize())
+        else:
+            out.append(w)
+    return " ".join(out)
+
+def street_of(x: dict) -> str:
+    if x.get("isStreetHidden"):
+        return "Address withheld"
+    unit = (x.get("unitNumber") or "").strip()
+    num = str(x.get("streetNumber") or "").strip()
+    name = title_words(x.get("streetName") or "")
+    left = f"{unit}/{num}" if unit else num
+    return f"{left} {name}".strip()
+
+def suburb_of(x: dict) -> str:
+    return title_words(x.get("suburbName") or "")
+
+def money(x: dict) -> str:
+    if x.get("isSoldPriceHidden"):
+        return ""
+    text = x.get("priceText") or ""
+    if text.startswith("$") or text.lower().startswith("offers") or text.lower().startswith("price"):
+        return text
+    if x.get("soldPrice"):
+        return f"${int(x['soldPrice']):,}"
+    return ""
+
+def date_label(iso: str) -> str:
+    dt = datetime.strptime(iso[:10], "%Y-%m-%d")
+    return dt.strftime("%-d %b %Y")
+
+def rex_base(account: str, listing_id: str) -> str:
+    return f"https://au-crm.cdns.rexsoftware.com/app/livestore/accounts/{account}/listings/{listing_id}/images/"
+
+def view_photo(x: dict, width: int) -> str:
+    slug = x.get("imageUrlSlug") or ""
+    fn = (x.get("heroImageUrl") or "").split("/")[-1]
+    if not slug or not fn:
+        return ""
+    return f"https://view.com.au/viewstatic/images/listing/{slug}/{width}-w/{fn}"
+
+def extract_gallery(raw: str, listing_id: str) -> tuple[str, list[str]]:
+    account = "193"
+    m = re.search(rf"accounts\\?/(\d+)\\?/listings\\?/{listing_id}\\?/", raw)
+    if m:
+        account = m.group(1)
+    names, seen = [], set()
+    for hit in re.finditer(rf"listings\\?/{listing_id}\\?/images\\?/([A-Za-z0-9._-]+\.(?:jpg|jpeg|webp))", raw, re.I):
+        name = hit.group(1)
+        if re.search(r"_\d+x\d+\.", name):
+            continue
+        if name not in seen:
+            seen.add(name)
+            names.append(name)
+    return account, names
+
+def parse_ngu_card(path: str, raw: str) -> dict:
+    text = re.sub(r"<script[\s\S]*?</script>", " ", raw, flags=re.I)
+    text = re.sub(r"<style[\s\S]*?</style>", " ", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    status = None
+    sm = re.search(r'data-testId="listing-status-chip"[\s\S]{0,700}?<p[^>]*>\s*([^<]+?)\s*</p>', raw)
+    if sm:
+        status = re.sub(r"\s+", " ", sm.group(1)).strip()
+    addrs = re.findall(r"((?:\d+[A-Za-z]?(?:\s*/\s*\d+[A-Za-z]?)?)\s+[^,]{2,80}?,\s+[A-Za-z][A-Za-z .'-]{1,40}\s+QLD\s+\d{4})", text)
+    addr = addrs[0] if addrs else None
+    def num(label):
+        m = re.search(rf"(\d+)\s+{label}", text)
+        return int(m.group(1)) if m else None
+    lands = [int(x.replace(",", "")) for x in re.findall(r"([\d,]+)\s+m²", text)]
+    i = text.find("Agent Details")
+    j = text.find("Agency Details", i if i >= 0 else 0)
+    agents = []
+    if i >= 0:
+        chunk = text[i + 13: j if j > i else i + 800]
+        for m in re.finditer(r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s+(?:Principal|Sales|Property|Director|Associate|Licensed)", chunk):
+            name = m.group(1).strip()
+            if name not in agents:
+                agents.append(name)
+    lid = None
+    pm = re.search(r"-(\d+)-[a-z0-9-]+$", path)
+    if pm:
+        lid = pm.group(1)
+    account, images = extract_gallery(raw, lid or "")
+    price = None
+    if addr and addr in text:
+        window = text[max(0, text.find(addr) - 90): text.find(addr)]
+        pm = re.search(r"((?:Sold\s+)?(?:Offers Over|Price Guide:?|Auction)[^$]{0,30}\$[\d,]+(?:\s*-\s*\$[\d,]+)?|Sold\s+\$[\d,]+|\$[\d,]+)\s*$", window)
+        if pm:
+            price = pm.group(1).strip()
+    return {
+        "path": path,
+        "url": "https://ngurealestate.com.au" + path,
+        "status": status,
+        "address": addr,
+        "price": price,
+        "beds": num("Bed"),
+        "baths": num("Bath"),
+        "cars": num("Car"),
+        "land": lands[0] if lands else None,
+        "agents": agents,
+        "account": account,
+        "listingId": lid,
+        "images": images,
+    }
+
+def load_p() -> list:
+    html = HTML_PATH.read_text(encoding="utf-8")
+    start = html.index("const P=")
+    end = html.index(";\n", start)
+    code = html[start:end + 1].replace("const P", "global.P", 1)
+    js = "const fs=require('fs');" + code + "fs.writeFileSync('/tmp/corey-src/p-live.json', JSON.stringify(P));"
+    Path("/tmp/corey-src").mkdir(exist_ok=True)
+    subprocess.check_call(["node", "-e", js])
+    return json.loads(Path("/tmp/corey-src/p-live.json").read_text())
+
+def p_key(street, suburb):
+    return norm_key(street, suburb)
+
+def main():
+    print("fetch view", flush=True)
+    current = view_listings(VIEW_AGENT, "Sale")
+    sold = view_listings(VIEW_AGENT, "Sold")
+    extra = view_listings("207932", "Sold")
+    print(f"view current {len(current)} sold {len(sold)} extra {len(extra)}", flush=True)
+    print("fetch ngu index", flush=True)
+    links = ngu_links()
+    print(f"ngu links {len(links)}", flush=True)
+    rows = []
+    def job(path):
+        return parse_ngu_card(path, fetch("https://ngurealestate.com.au" + path))
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        futs = [ex.submit(job, p) for p in links]
+        for n, fut in enumerate(as_completed(futs), 1):
+            rows.append(fut.result())
+            if n % 20 == 0:
+                print(f"ngu {n}/{len(links)}", flush=True)
+    by_key = {}
+    by_id = {}
+    for r in rows:
+        by_id[r["listingId"]] = r
+        parsed = clean_ngu_address(r.get("address") or "")
+        if not parsed:
+            continue
+        k = norm_key(*parsed)
+        if k:
+            by_key.setdefault(k, r)
+
+    def match_ngu(x):
+        street = street_of(x)
+        if x.get("isStreetHidden"):
+            # NGU publishes this one as suburb-only Brassall, 4 bed, $900–$950k.
+            return by_id.get("5275361")
+        name = (x.get("streetName") or "").lower()
+        price = x.get("soldPrice") or 0
+        if "workshops" in name and price == 1350000:
+            return by_id.get("4662758")
+        k = norm_key(street, x.get("suburbName") or "")
+        return by_key.get(k)
+
+    # Burgess Street is on View profile 207932 and on NGU, not on profile 155962.
+    burgess = next((x for x in extra if (x.get("streetName") or "") == "Burgess Street"), None)
+    chosen = [x for x in sold if (x.get("soldAt") or "")[:10] >= WINDOW_START]
+    have = {norm_key(street_of(x), x.get("suburbName") or "") for x in chosen}
+    if burgess and norm_key(street_of(burgess), burgess.get("suburbName") or "") not in have:
+        chosen.append(burgess)
+    chosen.sort(key=lambda x: x.get("soldAt") or "", reverse=True)
+
+    P = load_p()
+    p_by_key = {}
+    for p in P:
+        k = p_key(p[1], p[2])
+        if k:
+            p_by_key.setdefault(k, p)
+    next_id = max(int(p[0]) for p in P) + 1
+
+    current_rows = []
+    for x in current:
+        ngu = match_ngu(x)
+        street = street_of(x) if not x.get("isStreetHidden") else "Address withheld"
+        suburb = suburb_of(x)
+        k = None if x.get("isStreetHidden") else norm_key(street, suburb)
+        existing = p_by_key.get(k) if k else None
+        pid = existing[0] if existing else next_id
+        if not existing:
+            next_id += 1
+        beds = (ngu or {}).get("beds") or x.get("bedrooms") or 0
+        baths = (ngu or {}).get("baths") or x.get("bathrooms") or 0
+        cars = (ngu or {}).get("cars")
+        if not cars:
+            cars = x.get("carparks") or 0
+        land = (ngu or {}).get("land") or x.get("landSizeInSqm") or 0
+        # View's price text is complete. The NGU page parser can clip a price
+        # when the street number is the trailing ",000" of the price.
+        price = x.get("priceText") or (ngu or {}).get("price") or ""
+        if ngu and ngu.get("images"):
+            base = rex_base(ngu["account"], ngu["listingId"])
+            hero = ngu["images"][0]
+            stem, ext = hero.rsplit(".", 1)
+            photo = base + stem + "_800x600." + ext
+            media = {"gb": base, "gn": ngu["images"], "url": ngu["url"]}
+        else:
+            photo = view_photo(x, 800)
+            media = {"g": [{"t": view_photo(x, 800), "s": view_photo(x, 1200), "l": view_photo(x, 1440)}], "url": "https://view.com.au" + x.get("url", "")}
+        url = existing[10] if existing else ((ngu or {}).get("url") or ("https://view.com.au" + x.get("url", "")))
+        current_rows.append({
+            "id": pid,
+            "street": existing[1] if existing else street,
+            "suburb": existing[2] if existing else suburb,
+            "price": price,
+            "beds": beds or 0,
+            "baths": baths or 0,
+            "cars": cars or 0,
+            "land": int(land) if land else 0,
+            "url": url,
+            "photo": photo,
+            "media": media,
+            "new": existing is None,
+        })
+
+    sold_rows = []
+    sold_meta = {}
+    sold_photos = {}
+    for i, x in enumerate(chosen):
+        ngu = match_ngu(x)
+        street = street_of(x)
+        if ngu and "workshops" in (x.get("streetName") or "").lower() and (x.get("soldPrice") or 0) == 1350000:
+            parsed = clean_ngu_address(ngu.get("address") or "")
+            if parsed:
+                street = parsed[0]
+        suburb = suburb_of(x)
+        iso = (x.get("soldAt") or "")[:10]
+        price = money(x)
+        beds = (ngu or {}).get("beds") if ngu and ngu.get("beds") else (x.get("bedrooms") or 0)
+        baths = (ngu or {}).get("baths") if ngu and ngu.get("baths") else (x.get("bathrooms") or 0)
+        cars = (ngu or {}).get("cars") if ngu and ngu.get("cars") else (x.get("carparks") or 0)
+        land = (ngu or {}).get("land") or x.get("landSizeInSqm") or 0
+        key = f"sale-{i}"
+        others = [a for a in (ngu or {}).get("agents") or [] if a != "Corey Athanates"]
+        head = ("Listed with " + " and ".join(others)) if others else ("Joint sale" if len(x.get("agentId") or []) > 1 else "")
+        if ngu and ngu.get("images"):
+            base = rex_base(ngu["account"], ngu["listingId"])
+            hero = ngu["images"][0]
+            stem, ext = hero.rsplit(".", 1)
+            sold_photos["s" + str(i)] = base + stem + "_800x600." + ext
+            meta = {"h": head, "d": "", "gb": base, "gn": ngu["images"], "url": ngu["url"], "date": iso}
+        else:
+            sold_photos["s" + str(i)] = view_photo(x, 800)
+            meta = {
+                "h": head, "d": "", "date": iso,
+                "g": [{"t": view_photo(x, 800), "s": view_photo(x, 1200), "l": view_photo(x, 1440)}],
+                "url": "https://view.com.au" + (x.get("url") or ""),
+            }
+        sold_meta[key] = meta
+        sold_rows.append([
+            street, suburb, price, date_label(iso) if iso else "",
+            beds or 0, baths or 0, cars or 0, int(round(land)) if land else 0, key,
+        ])
+
+    top_i = max(range(len(sold_rows)), key=lambda i: _price_num(sold_rows[i][2]))
+    top_price = sold_rows[top_i][2]
+    n_sale = len(current_rows)
+    n_sold = len(sold_rows)
+    twelve = sum(1 for x in chosen if (x.get("soldAt") or "")[:10] >= "2025-11-07")
+    print(f"current {n_sale} sold {n_sold} twelve_from_nov7 {twelve} top {top_price}", flush=True)
+    unmatched = [street_of(x) + ", " + suburb_of(x) for x in chosen if not match_ngu(x) and not x.get("isStreetHidden")]
+    print("sold without ngu gallery", unmatched, flush=True)
+
+    html = HTML_PATH.read_text(encoding="utf-8")
+    sold_js = "const SOLD=" + json.dumps(sold_rows, ensure_ascii=False) + ";\nconst SOLD_META=" + json.dumps(sold_meta, ensure_ascii=False) + ";"
+    sold_block = "/* COREY_SOLD_START */\n" + sold_js + "\n/* COREY_SOLD_END */"
+    if "/* COREY_SOLD_START */" in html:
+        html = re.sub(r"/\* COREY_SOLD_START \*/[\s\S]*?/\* COREY_SOLD_END \*/", sold_block, html, count=1)
+    else:
+        html = re.sub(r"const SOLD=\[[\s\S]*?const PHOTOS=", sold_block + "\nconst PHOTOS=", html, count=1)
+
+    apply = build_apply(current_rows, sold_photos)
+    if "/* COREY_APPLY_START */" in html:
+        html = re.sub(r"/\* COREY_APPLY_START \*/[\s\S]*?/\* COREY_APPLY_END \*/", apply, html, count=1)
+    else:
+        html = html.replace(
+            'const COREY=new Set(["6 Nigel Street","9 Eagleton Crescent","67 Downs Street","4/13 Booval Street","19/25 St Andrews Drive"]);',
+            apply,
+            1,
+        )
+
+    html = patch_copy(html, n_sale, n_sold, top_price, top_i)
+    html = html.replace(
+        '<link rel="preconnect" href="https://au-crm.cdns.rexsoftware.com" crossorigin>',
+        '<link rel="preconnect" href="https://au-crm.cdns.rexsoftware.com" crossorigin>\n<link rel="preconnect" href="https://view.com.au" crossorigin>',
+        1,
+    )
+    # card specs: skip missing beds/baths (land)
+    old_specs = '<span class="specs"><span><b>${x[4]}</b> bed</span><span><b>${x[5]}</b> bath</span>'
+    new_specs = '<span class="specs">${x[4]?`<span><b>${x[4]}</b> bed</span>`:""}${x[5]?`<span><b>${x[5]}</b> bath</span>`:""}'
+    if old_specs in html:
+        html = html.replace(old_specs, new_specs, 1)
+    old_fine = "Result from NGU Real Estate. Corey can walk you through the comparable sales nearby."
+    new_fine = "Sold price and date from view.com.au. Photos are the full-size NGU images where Corey is named on the listing."
+    html = html.replace(old_fine, new_fine)
+    HTML_PATH.write_text(html, encoding="utf-8")
+    print("wrote", HTML_PATH, flush=True)
+
+def _price_num(s: str) -> int:
+    nums = re.findall(r"\d[\d,]*", s or "")
+    return int(nums[-1].replace(",", "")) if nums else 0
+
+def build_apply(current_rows, sold_photos) -> str:
+    payload = {"rows": current_rows, "soldPhotos": sold_photos}
+    data = json.dumps(payload, ensure_ascii=False)
+    return """/* COREY_APPLY_START */
+const COREY=new Set();
+const COREY_FEED=""" + data + """;
+(function(){
+  const feed=COREY_FEED;
+  for(const row of feed.rows){
+    let p=P.find(x=>String(x[0])===String(row.id));
+    if(!p){
+      p=[row.id,row.street,row.suburb,row.price,row.beds||0,row.baths||0,row.cars||0,row.land||0,null,null,row.url,"",1,(row.media&&(row.media.gn||row.media.g)||[]).length,[],"Corey’s listing"];
+      P.push(p);
+    }else{
+      p[3]=row.price;p[4]=row.beds||0;p[5]=row.baths||0;p[6]=row.cars||0;if(row.land)p[7]=row.land;
+    }
+    COREY.add(p[1]);
+    MEDIA[String(p[0])]=row.media;
+    if(row.photo)PHOTOS[String(p[0])]=row.photo;
+  }
+  Object.assign(PHOTOS, feed.soldPhotos);
+})();
+/* COREY_APPLY_END */"""
+
+def patch_copy(html, n_sale, n_sold, top_price, top_i):
+    html = html.replace(
+        '<p class="proof"><a href="#reviews" data-scroll="reviews">Client testimonials</a><span>5 recent sales featured</span><a href="#sold-0">Top sale $1,000,000</a></p>',
+        f'<p class="proof"><a href="#reviews" data-scroll="reviews">Client testimonials</a><span>{n_sold} sales in 24 months</span><a href="#sold-{top_i}">Top sale {top_price}</a></p>',
+    )
+    html = html.replace(
+        "<p class=\"lead\">5 recent sales featured below.</p>",
+        f"<p class=\"lead\">{n_sold} sales in the last 24 months, including joint sales. The latest are below.</p>",
+    )
+    html = html.replace(
+        "<p class=\"lead\">5 recent sales.</p>",
+        f"<p class=\"lead\">{n_sold} sales in the last 24 months where Corey is named, including joint sales. view.com.au’s own 12-month figure is 29 sales, median $830,000.</p>",
+    )
+    html = html.replace(
+        '<p class="count" style="margin-top:24px">Sales and prices from ngurealestate.com.au, checked 2 November 2026. Sales shown are from Corey Athanates’ public NGU listings. Legacy note removed from realestate.com.au.</p>',
+        '<p class="count" style="margin-top:24px">Prices and sold dates from <a class="link" href="https://view.com.au/agent-profile/corey-athanates-155962/" target="_blank" rel="noopener">view.com.au</a>, checked 7 November 2026, for sales since 7 November 2024. Photos are full-size images from NGU’s Rex library (the same source as the rest of this site), or view.com.au where NGU has no gallery. realestate.com.au did not return a personal rating.</p>',
+    )
+    html = html.replace(
+        '<p class="stars" role="img" aria-label="5 out of 5 stars">★★★★★</p>\n      <blockquote>',
+        '<p class="who">Testimonials published by NGU Real Estate. No personal star rating is shown: realestate.com.au and RateMyAgent did not return Corey’s own rating or review count when checked on 7 November 2026.</p>\n      <blockquote>',
+    )
+    html = html.replace(
+        '<p class="pu-proof">★ 4.8 from 16 reviews · “…extremely knowledgeable of the industry and market conditions.” Seller, Flinders View</p>',
+        "",
+    )
+    # home tile caption is static and fine. Sale count is computed.
+    html = html.replace(
+        "Scraped base 2 Nov 2026; open homes synced from guide; Corey refresh 2026-11-07 05:45 Brisbane (buy/sold from NGU staff page).",
+        f"Corey listings and sales refreshed {CHECKED} from view.com.au and ngurealestate.com.au. {n_sale} for sale, {n_sold} sales since 7 November 2024.",
+    )
+    return html
+
+if __name__ == "__main__":
+    main()
