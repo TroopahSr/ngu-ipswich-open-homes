@@ -268,6 +268,7 @@ select{appearance:none;-webkit-appearance:none;background-image:url("data:image/
 .card-gal{display:block;touch-action:manipulation}
 .card-gal .cg-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;width:100%;height:100%;position:absolute;inset:0;touch-action:pan-y;overscroll-behavior-x:contain}
 .card-gal .cg-track.is-drag{scroll-snap-type:none;scroll-behavior:auto}
+@media (hover:none) and (pointer:coarse){.card-gal .cg-track{overflow-x:hidden;touch-action:pan-y}}
 .card-gal .cg-track::-webkit-scrollbar{display:none}
 .card-gal .cg-track img{position:relative;inset:auto;flex:0 0 100%;width:100%;height:100%;object-fit:cover;scroll-snap-align:center;opacity:1;pointer-events:none;background:#dfe6f0}
 .card-gal .cg-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:3;width:34px;height:34px;border:0;border-radius:50%;background:rgba(255,255,255,.92);font-size:20px;line-height:1;color:#111;box-shadow:0 2px 8px rgba(0,0,0,.16);cursor:pointer;display:grid;place-items:center;padding:0 0 2px;-webkit-tap-highlight-color:transparent}
@@ -1142,8 +1143,9 @@ function onCardGalMove(track, x, y, e){
   const dx=x-st.x0, dy=y-st.y0;
   const adx=Math.abs(dx), ady=Math.abs(dy);
   if(!st.axis){
-    if(adx<8&&ady<8)return;
-    st.axis = adx>ady ? "h" : "v";
+    const th=st.touch?2:8;
+    if(adx<th&&ady<th)return;
+    st.axis = adx>ady*1.15 ? "h" : "v";
     if(st.axis==="h"){
       track.classList.add("is-drag");
       // freeze startScroll at lock time for stable dragging
@@ -1192,7 +1194,28 @@ function onCardGalUp(track){
   }
   cardGalDrag.delete(track);
 }
+/* Touch: real touch events so a sideways swipe can block page scroll from its first move (iOS ignores pointer preventDefault) */
+document.addEventListener("touchstart",e=>{
+  const track=e.target.closest&&e.target.closest(".card-gal .cg-track");
+  if(!track||e.touches.length!==1)return;
+  const t0=e.touches[0];
+  onCardGalDown(track,t0.clientX,t0.clientY,"touch");
+  const st0=cardGalDrag.get(track);if(st0)st0.touch=true;
+  const cleanup=()=>{track.removeEventListener("touchmove",move);track.removeEventListener("touchend",end);track.removeEventListener("touchcancel",end)};
+  const move=ev=>{
+    if(ev.touches.length!==1){cleanup();if(cardGalDrag.has(track))onCardGalUp(track);return}
+    const st=cardGalDrag.get(track);if(!st){cleanup();return}
+    const tt=ev.touches[0];
+    onCardGalMove(track,tt.clientX,tt.clientY,ev);
+    if(st.axis==="v"){cleanup();cardGalDrag.delete(track);track.classList.remove("is-drag")}
+  };
+  const end=()=>{cleanup();if(cardGalDrag.has(track))onCardGalUp(track)};
+  track.addEventListener("touchmove",move,{passive:false});
+  track.addEventListener("touchend",end,{passive:true});
+  track.addEventListener("touchcancel",end,{passive:true});
+},{passive:true});
 document.addEventListener("pointerdown",e=>{
+  if(e.pointerType==="touch")return;
   if(e.pointerType==="mouse"&&e.button!==0)return;
   const track=e.target.closest(".card-gal .cg-track");
   if(!track)return;
