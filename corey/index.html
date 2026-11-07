@@ -610,7 +610,7 @@ header.top:not(.scrolled){border-bottom-color:transparent;background:rgba(255,25
   <section class="wrap" style="padding-bottom:96px">
     <div class="tools">
       <input id="fs-q" type="search" placeholder="Street or suburb" aria-label="Search by street or suburb">
-      <select id="fs-sort" aria-label="Sort"><option value="new">Featured</option><option value="lo">Price: low–high</option><option value="hi">Price: high–low</option><option value="open">Next open</option></select>
+      <select id="fs-sort" aria-label="Sort"><option value="new">Newest</option><option value="lo">Price: low–high</option><option value="hi">Price: high–low</option><option value="open">Next open</option></select>
       <button class="btn" id="fs-toggle" type="button" aria-expanded="false" aria-controls="fs-filters">Filter<span id="fs-fcount" class="fcount"></span></button>
     </div>
     <div class="fbox" id="fs-filters" hidden>
@@ -1485,13 +1485,14 @@ document.addEventListener("keydown",e=>{
 const FS={corey:false,under:false,land:false};
 const PAGE=matchMedia("(max-width:600px)").matches?12:24;let shown=PAGE;
 [...new Set(P.map(p=>p[2]))].sort().forEach(s=>{for(const id of["fs-sub","sub"]){const o=document.createElement("option");o.value=s;o.textContent=s;$(id).appendChild(o)}});
+const listAge=p=>{const m=MEDIA[String(p[0])]||{};const s=(m.gb||"")+" "+JSON.stringify(m.g||"")+" "+(PHOTOS[String(p[0])]||"");const id=(s.match(/listings\/(\d+)\//)||[])[1];return id?+id:0};
 function renderFS(){
   for(const k in FS){const el=$("fs-"+k);if(el)el.setAttribute("aria-pressed",FS[k]);}
   const q=$("fs-q").value.trim().toLowerCase(),sub=$("fs-sub").value,beds=+$("fs-beds").value,sort=$("fs-sort").value;
   $("fs-fcount").textContent=([sub,beds].filter(Boolean).length+Object.values(FS).filter(Boolean).length)||"";
   let list=P.filter(p=>(!q||(p[1]+" "+p[2]).toLowerCase().includes(q))&&(!sub||p[2]===sub)&&p[4]>=beds
     &&(!FS.corey||COREY.has(p[1]))&&(!FS.under||((priceHi(p[3])??9e9)<=700000))&&(!FS.land||p[7]>=4000||isHa(p)));
-  if(sort==="new")list.sort((a,b)=>(COREY.has(b[1])-COREY.has(a[1]))||(openKey(a)-openKey(b))||a[2].localeCompare(b[2]));
+  if(sort==="new")list.sort((a,b)=>(COREY.has(b[1])-COREY.has(a[1]))||(listAge(b)-listAge(a))||a[2].localeCompare(b[2]));
   if(sort==="open")list.sort((a,b)=>openKey(a)-openKey(b));
   if(sort==="lo")list.sort((a,b)=>(priceNum(a[3])??9e9)-(priceNum(b[3])??9e9));
   if(sort==="hi")list.sort((a,b)=>(priceNum(b[3])??-1)-(priceNum(a[3])??-1));
