@@ -55,7 +55,7 @@ function renderList(){
     return `<div class="row${done?" done":""}" data-idx="${i}" data-id="${p.id}" id="r-${p.id}-${s.start.slice(0,10)}">
       <button type="button" class="row-btn" aria-expanded="false" aria-controls="detail">
         <span class="ph">${thumb}<span class="num" aria-label="Guide number ${p.number}">${p.number}</span></span>
-        <span class="txt"><span class="time">${range(s)}</span>${done?'<span class="badge">Finished</span>':""}${other.length?`<span class="badge gold">+${other.length} more</span>`:""}
+        <span class="txt"><span class="time">${fmt(s.start,{weekday:"short",day:"numeric",month:"short"})} · ${range(s)}</span>${done?'<span class="badge">Finished</span>':""}${other.length?`<span class="badge gold">+${other.length} more</span>`:""}
           <span class="addr">${esc(p.streetAddress)}</span><span class="sub">${esc(p.suburb)}</span>
           <span class="price">${esc(p.priceDisplay)}</span><span class="facts">${facts(p)}</span></span>
         <span class="chev" aria-hidden="true">›</span>

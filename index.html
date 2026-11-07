@@ -235,6 +235,9 @@ select{appearance:none;-webkit-appearance:none;background-image:url("data:image/
 .slot-h .st{font-size:14px;font-weight:500;color:var(--sub)}
 .live{color:var(--blue);font-weight:600}
 .oc.done{opacity:.6}
+.oc .open-time{display:block;color:var(--blue,#0071e3);font-size:14px;font-weight:600;line-height:1.5;margin-bottom:10px}
+.oc .open-status{display:block;color:var(--sub);font-size:12px;font-weight:500}
+#oh-list>.grid3{margin-bottom:32px}
 .fin{margin-top:8px;border-top:1px solid var(--line)}
 .fin summary{cursor:pointer;font-weight:600;min-height:52px;list-style:none;display:flex;align-items:center;justify-content:space-between}
 .fin summary::-webkit-details-marker{display:none}
@@ -1502,9 +1505,9 @@ function passes(i){
 function card(i,st){
   const p=byNo[i.n],meta=[];
   if(p[11])meta.push('<span class="vid">▶ Video</span>');
-  return `<article class="card tap lc oc${st==="done"?" done":""}" data-open="${i.d}|${i.s}|${i.n}" tabindex="0" role="link" aria-label="${esc(`${p[1]}, ${p[2]}, ${p[3]}, open ${range(i.s,i.e)}${st==="done"?", finished":""}`)}">
+  return `<article class="card tap lc oc${st==="done"?" done":""}" data-open="${i.d}|${i.s}|${i.n}" tabindex="0" role="link" aria-label="${esc(`${p[1]}, ${p[2]}, ${p[3]}, open ${S[i.d].label}, ${range(i.s,i.e)}${st==="done"?", finished":""}`)}">
     ${cardPhoto(p)}
-    <span class="bd">${kicker(p)}<span class="sr">Open ${range(i.s,i.e)}${st==="done"?", finished":""}.</span><span class="addr">${esc(p[1])}</span><span class="sub">${esc(p[2])}</span><span class="price">${esc(p[3])}</span><span class="specs">${specs(p)}</span>${meta.length?`<span class="meta">${meta.join("")}</span>`:""}</span>
+    <span class="bd"><span class="open-time">${S[i.d].label} · ${range(i.s,i.e)}${st==="live"?'<span class="open-status">Open now</span>':st==="done"?'<span class="open-status">Finished</span>':""}</span>${kicker(p)}<span class="addr">${esc(p[1])}</span><span class="sub">${esc(p[2])}</span><span class="price">${esc(p[3])}</span><span class="specs">${specs(p)}</span>${meta.length?`<span class="meta">${meta.join("")}</span>`:""}</span>
   </article>`;
 }
 function renderOH(){
@@ -1517,10 +1520,11 @@ function renderOH(){
   const items=INSP.filter(i=>i.d===day&&passes(i));
   const up=items.filter(i=>status(i.d,i.s,i.e)!=="done"),done=items.filter(i=>status(i.d,i.s,i.e)==="done");
   $("count").textContent=`${items.length} open home${items.length===1?"":"s"}${done.length?(up.length?` · ${up.length} still to come`:" · all finished"):""}`;
-  const group=arr=>{let out="",cur="";for(const i of arr){const g=i.s+"|"+i.e;if(g!==cur){if(cur)out+="</div></div>";cur=g;const st=status(i.d,i.s,i.e);out+=`<div class="slot"><h2 class="slot-h" style="font-size:16px">${range(i.s,i.e)}${st==="live"?'<span class="st live">Open now</span>':st==="done"?'<span class="st">Finished</span>':""}</h2><div class="grid3">`}out+=card(i,status(i.d,i.s,i.e))}if(cur)out+="</div></div>";return out};
+  // Every inspection owns its day/time label; shared slots are not visual groups.
+  const cards=arr=>`<div class="grid3">${arr.map(i=>card(i,status(i.d,i.s,i.e))).join("")}</div>`;
   const nextDay=DAYS[DAYS.indexOf(day)+1];
-  let html=up.length?group(up):(items.length?`<div class="empty">All of ${S[day].label}’s open homes have finished.${nextDay?` <button class="link" type="button" style="margin-left:6px" data-goday="${nextDay}">See ${S[nextDay].label} →</button>`:""}</div>`:"");
-  if(done.length)html+=`<details class="fin"${up.length?"":" open"}><summary>Finished (${done.length})</summary>${group(done)}</details>`;
+  let html=up.length?cards(up):(items.length?`<div class="empty">All of ${S[day].label}’s open homes have finished.${nextDay?` <button class="link" type="button" style="margin-left:6px" data-goday="${nextDay}">See ${S[nextDay].label} →</button>`:""}</div>`:"");
+  if(done.length)html+=`<details class="fin"${up.length?"":" open"}><summary>Finished (${done.length})</summary>${cards(done)}</details>`;
   if(!items.length)html=`<div class="empty">No open homes match those filters.</div>`;
   if(up.length&&up.length<=3)html+=`<p class="count" style="margin-top:8px">More opens are added as NGU offices confirm them.</p><p style="text-align:center;margin-top:12px"><a class="btn primary" href="tel:${PHONE}">${I.call}Call Leigh for an inspection</a></p>`;
   $("oh-list").innerHTML=html;
