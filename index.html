@@ -387,6 +387,8 @@ form .ok a{color:var(--blue)}
 .copybox{margin-top:10px;white-space:pre-wrap;font-size:13px;background:var(--alt);border-radius:var(--r-s);padding:10px 12px;user-select:all}
 [aria-invalid="true"]{border-color:var(--red)!important}
 input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--blue)!important;outline-offset:2px}
+input:not([type=checkbox]):not([type=radio]):focus,input:not([type=checkbox]):not([type=radio]):focus-visible,select:focus,select:focus-visible,textarea:focus,textarea:focus-visible{outline:none!important}
+input,select,textarea{-webkit-tap-highlight-color:transparent}
 .err{color:var(--red);font-size:13px;font-weight:400}
 .pu-proof{max-width:620px;margin:-64px auto 96px;padding:0 22px;text-align:center;color:var(--sub);font-size:15px;text-wrap:balance}
 
