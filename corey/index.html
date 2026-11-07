@@ -1229,7 +1229,7 @@ document.addEventListener("keydown",e=>{
     track.scrollTo({left:next*track.clientWidth,behavior:"smooth"});
     return;
   }
-  const card=e.target.closest?.("article.card.lc[data-listing],article.card.lc[data-open]");
+  const card=e.target.closest?.("article.card.lc[data-listing],article.card.lc[data-open],article.card.lc[data-sold]");
   if(card&&(e.key==="Enter"||e.key===" ")){
     if(e.target.closest(".card-gal"))return;
     e.preventDefault();
@@ -1250,7 +1250,7 @@ document.addEventListener("click",e=>{
   }
   const enq=e.target.closest("[data-enquire]");
   if(enq){e.preventDefault();openEnquiry({topic:enq.dataset.topic||"General",property:enq.dataset.property||"",from:enq});return}
-  const so=e.target.closest("[data-sold]");if(so){openSold(+so.dataset.sold,so);return}
+  const so=e.target.closest("[data-sold]");if(so){const track=e.target.closest(".card-gal .cg-track");if(e.target.closest(".card-gal .cg-nav,.card-gal .cg-dots"))return;if(track&&cardGalMoved.get(track)?.moved){cardGalMoved.delete(track);return}openSold(+so.dataset.sold,so);return}
   const li=e.target.closest("[data-listing]");
   if(li){
     const track=e.target.closest(".card-gal .cg-track");
@@ -1564,8 +1564,8 @@ $("f-toggle").addEventListener("click",()=>{const p=$("oh-filters");p.hidden=!p.
 $("f-reset").addEventListener("click",()=>{$("q").value="";$("sub").value="";$("price").value="";$("beds").value="0";for(const f in F)F[f]=false;renderOH()});
 
 /* ---------- sold ---------- */
-const soldCardPhoto=(x,k)=>{const n=galleryOf(soldMetaOf(x)).length;const badge=n>1?`<span class="ph-count">${n} photos</span>`:"";const key="s"+k;return PHOTOS[key]?`<span class="ph"><img src="${esc(photoSrc(PHOTOS[key]))}" alt="${esc(x[0])}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onload="this.classList.add('loaded')" onerror="this.parentNode.classList.add('empty-ph');this.remove()"><span class="tag">SOLD</span>${badge}</span>`:`<span class="ph empty-ph" aria-hidden="true"><span class="tag">SOLD</span><span class="ph-sub">${esc(x[1])}</span></span>`};
-$("sold-list").innerHTML=SOLD.map((x,k)=>`<button class="card tap lc" type="button" data-sold="${k}" aria-label="${esc(`${x[0]}, ${x[1]}, sold ${x[2]||"price withheld"}${x[3]?", "+x[3]:""}`)}">${soldCardPhoto(x,k)}<span class="bd"><span class="addr">${esc(x[0])}</span><span class="sub">${esc(x[1])}</span><span class="price">${x[2]?esc(x[2]):"Price withheld"}</span>${x[3]?`<span class="sold-on">Sold ${esc(x[3])}</span>`:""}<span class="specs">${x[4]?`<span><b>${x[4]}</b> bed</span>`:""}${x[5]?`<span><b>${x[5]}</b> bath</span>`:""}${x[6]?`<span><b>${x[6]}</b> car</span>`:""}${x[7]?(x[7]<100?`<span><b>${x[7]}</b> ha</span>`:`<span><b>${x[7].toLocaleString("en-AU")}</b> m²</span>`):""}</span></span></button>`).join("");
+const soldCardPhoto=(x,k)=>{const galAll=galleryOf(soldMetaOf(x));const key="s"+k;if(galAll.length>1){const gal=galAll.slice(0,CARD_GAL_MAX);const local=PHOTOS[key]?photoSrc(PHOTOS[key]):"";const imgs=gal.map((im,i)=>{const thumb=im.t||im.s;const data=i===0?(local||thumb):thumb;return `<img data-src="${esc(data)}" alt="${esc(x[0])} photo ${i+1} of ${gal.length}" decoding="async" referrerpolicy="no-referrer" data-i="${i}">`}).join("");const maxDots=Math.min(gal.length,7);const dots=`<span class="cg-dots" aria-hidden="true">${Array.from({length:maxDots},(_,i)=>`<i${i===0?` class="on"`:""}></i>`).join("")}</span>`;return `<span class="ph card-gal" data-card-gal data-n="${gal.length}"><span class="cg-track" tabindex="0" role="group" aria-label="${esc(`${x[0]} photos, swipe for more`)}">${imgs}</span><button type="button" class="cg-nav prev" aria-label="Previous photo" hidden>‹</button><button type="button" class="cg-nav next" aria-label="Next photo">›</button>${dots}<span class="cg-count">1 / ${gal.length}</span><span class="tag">SOLD</span></span>`}const n=galAll.length;const badge=n>1?`<span class="ph-count">${n} photos</span>`:"";return PHOTOS[key]?`<span class="ph"><img src="${esc(photoSrc(PHOTOS[key]))}" alt="${esc(x[0])}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onload="this.classList.add('loaded')" onerror="this.parentNode.classList.add('empty-ph');this.remove()"><span class="tag">SOLD</span>${badge}</span>`:`<span class="ph empty-ph" aria-hidden="true"><span class="tag">SOLD</span><span class="ph-sub">${esc(x[1])}</span></span>`};
+$("sold-list").innerHTML=SOLD.map((x,k)=>`<article class="card tap lc" tabindex="0" role="link" data-sold="${k}" aria-label="${esc(`${x[0]}, ${x[1]}, sold ${x[2]||"price withheld"}${x[3]?", "+x[3]:""}`)}">${soldCardPhoto(x,k)}<span class="bd"><span class="addr">${esc(x[0])}</span><span class="sub">${esc(x[1])}</span><span class="price">${x[2]?esc(x[2]):"Price withheld"}</span>${x[3]?`<span class="sold-on">Sold ${esc(x[3])}</span>`:""}<span class="specs">${x[4]?`<span><b>${x[4]}</b> bed</span>`:""}${x[5]?`<span><b>${x[5]}</b> bath</span>`:""}${x[6]?`<span><b>${x[6]}</b> car</span>`:""}${x[7]?(x[7]<100?`<span><b>${x[7]}</b> ha</span>`:`<span><b>${x[7].toLocaleString("en-AU")}</b> m²</span>`):""}</span></span></article>`).join("");
 
 {const cards=[...$("sold-list").children];cards.forEach((c,i)=>{if(i>=12)c.hidden=true});$("sold-more").textContent=`Show all ${cards.length} sales`;if(cards.length<=12)$("sold-more-wrap").hidden=true;$("sold-more").addEventListener("click",()=>{cards.forEach(c=>c.hidden=false);$("sold-more-wrap").hidden=true;cards[12]&&cards[12].focus();hydrateCardPhotos($("sold-list"))})}
 $("home-sold").innerHTML=[0,1,2].filter(k=>k<SOLD.length).map(k=>{const e=document.querySelector(`#sold-list [data-sold="${k}"]`).cloneNode(true);e.hidden=false;return e.outerHTML}).join("");
