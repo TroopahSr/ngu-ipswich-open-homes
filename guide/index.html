@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<meta name="color-scheme" content="light">
+<title>NGU Ipswich Open Homes – Daily Guide</title>
+<meta name="description" content="Daily Guide to NGU open homes across Ipswich &amp; surrounds: inspection times, prices, photos and floor plans.">
+<link rel="icon" href="assets/ngu-logo-black.png">
+<link rel="stylesheet" href="styles.css?v=776368432d">
+</head>
+<body>
+<a class="skip-link" href="#openList">Skip to open homes</a>
+<header class="masthead">
+  <img class="brand-logo" src="assets/ngu-logo-black.png" alt="NGU Real Estate" width="150" height="72">
+</header>
+<main class="shell">
+  <section class="intro" aria-labelledby="pageTitle">
+    <p class="eyebrow">Daily Guide · Ipswich &amp; surrounds</p>
+    <h1 id="pageTitle">NGU Ipswich <span class="nw">Open Homes</span></h1>
+    <p class="dates" id="weekendDates"></p>
+    <p class="stats"><span class="total" id="totalOpens"></span><span class="split" id="splitCounts"></span></p>
+    <p class="notice">Times may differ or be removed.</p>
+    <p class="updated" id="lastUpdated"></p>
+  </section>
+  <nav class="day-filters" id="dayFilters" aria-label="Inspection day"></nav>
+  <h2 class="day-heading" id="dayHeading"></h2>
+  <p class="day-count" id="dayCount" aria-live="polite"></p>
+  <div class="open-list" id="openList"></div>
+  <footer class="site-foot">
+    <p class="enquiries" id="enquiries"></p>
+    <a class="pdf-link" id="pdfLink" href="#">Download the printable guide <span aria-hidden="true">›</span></a>
+    <p class="offices" id="officeScope"></p>
+    <p class="enquiries" id="footEnquiries" hidden></p>
+    <p>Photos, prices and inspection times as advertised by the participating NGU offices.</p>
+  </footer>
+</main>
+
+<dialog id="photoDialog" class="viewer" aria-labelledby="photoTitle">
+  <div class="viewer-bar">
+    <h2 id="photoTitle">Photos</h2>
+    <span id="photoCount" aria-live="polite"></span>
+    <button type="button" class="viewer-close" data-close>Close</button>
+  </div>
+  <div class="viewer-track" id="photoTrack" tabindex="0"></div>
+  <button type="button" class="nav prev" data-step="-1" aria-label="Previous photo">‹</button>
+  <button type="button" class="nav next" data-step="1" aria-label="Next photo">›</button>
+</dialog>
+
+<dialog id="planDialog" class="viewer plan" aria-labelledby="planTitle">
+  <div class="viewer-bar">
+    <h2 id="planTitle">Floor plan</h2>
+    <div class="zoom-ctrls">
+      <button type="button" data-zoom="-1" aria-label="Zoom out">−</button>
+      <button type="button" data-zoom="0">Fit</button>
+      <button type="button" data-zoom="1" aria-label="Zoom in">+</button>
+    </div>
+    <button type="button" class="viewer-close" data-close>Close</button>
+  </div>
+  <div class="plan-stage" id="planStage"><img id="planImg" alt="" draggable="false"></div>
+  <p class="plan-hint">Pinch or use + / − to zoom. Drag to move.</p>
+</dialog>
+<script src="data.js?v=9ade13b2b3"></script>
+<script src="app.js?v=b7f3aaf2bb"></script>
+</body>
+</html>
