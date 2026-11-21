@@ -1,0 +1,160 @@
+(function(){
+"use strict";
+const G=window.GUIDE, P=G.properties, TZ="Australia/Brisbane";
+P.forEach(p=>{const m=p.media;if(m&&m.gb){m.gallery=m.gn.map(n=>{const k=n.lastIndexOf(".");return{s:m.gb+n.slice(0,k)+"_800x600"+n.slice(k),l:m.gb+n}})}if(m&&!m.gallery)m.gallery=[];});
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt=(iso,o)=>new Intl.DateTimeFormat("en-AU",Object.assign({timeZone:TZ},o)).format(new Date(iso));
+const hm=iso=>fmt(iso,{hour:"numeric",minute:"2-digit",hour12:true}).replace(/\s?(am|pm)/i,m=>" "+m.trim().toLowerCase());
+const range=s=>{const a=hm(s.start),b=hm(s.end);const ap=a.slice(-2)===b.slice(-2);return (ap?a.slice(0,-3):a)+"–"+b;};
+const dayLabel=d=>fmt(d+"T12:00:00+10:00",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+const ICON={bed:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 18V7m0 6h18v5M3 13V11a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v2m9 0v-1a3 3 0 0 0-3-3h-6"/></svg>',
+bath:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12h16v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-3Zm2 0V6a2 2 0 0 1 4 0M7 19l-1 2m11-2 1 2"/></svg>',
+car:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 16v3m14-3v3M3 16h18v-4l-2-5H5l-2 5v4Zm4-3h.01M17 13h.01"/></svg>',
+land:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z M4 9h4M16 4v4M20 15h-4M9 20v-4"/></svg>'};
+const facts=p=>[["bed",p.beds,"bedrooms"],["bath",p.baths,"bathrooms"],["car",p.cars,"car spaces"],["land",p.land,"land"]]
+  .filter(f=>f[1]!==null&&f[1]!==undefined&&f[1]!=="").map(f=>`<span title="${f[2]}">${ICON[f[0]]}<span class="sr-only">${f[2]} </span>${esc(f[1])}</span>`).join("");
+// sessions flattened
+const sessions=[];P.forEach(p=>p.sessions.forEach(s=>sessions.push({p,s})));
+sessions.sort((a,b)=>a.s.start.localeCompare(b.s.start)||a.p.number-b.p.number);
+const days=G.days.filter(d=>sessions.some(x=>x.s.date===d));
+// header
+const nS=sessions.length,nP=P.length;
+$("#totalOpens").innerHTML=`<strong>${nS}</strong> open home${nS===1?"":"s"}`;
+{const mo=d=>fmt(d+"T12:00:00+10:00",{month:"long"}),wd=d=>fmt(d+"T12:00:00+10:00",{weekday:"long"})+" "+fmt(d+"T12:00:00+10:00",{day:"numeric"});
+ const same=days.every(d=>mo(d)===mo(days[0]));
+ $("#weekendDates").textContent=(same?days.map(wd).join(" & ")+" "+mo(days[0]):days.map(d=>wd(d)+" "+mo(d)).join(" & "))+" "+days[days.length-1].slice(0,4);}
+$("#splitCounts").innerHTML=`<span><b>${nP}</b> propert${nP===1?"y":"ies"}</span>`+days.map(d=>{const n=sessions.filter(x=>x.s.date===d).length;return `<span><b>${n}</b> ${fmt(d+"T12:00:00+10:00",{weekday:"short"})}</span>`}).join("");
+$("#lastUpdated").textContent="Last updated "+fmt(G.updatedAt,{day:"numeric",month:"short",year:"numeric"})+", "+hm(G.updatedAt);
+$("#officeScope").textContent="Listings from "+G.offices.slice(0,-1).join(", ")+" and "+G.offices.slice(-1)+".";
+$("#pdfLink").href=G.pdf;
+{const E=G.enquiries||{};if(E.name){$("#enquiries").innerHTML=`Enquiries: ${esc(E.name)}`+(E.phone?` · <a href="tel:${esc(E.phone.replace(/\s/g,""))}">${esc(E.phone)}</a>`:"")+(E.email?` · <a href="mailto:${esc(E.email)}">${esc(E.email)}</a>`:"");$("#footEnquiries").innerHTML=$("#enquiries").innerHTML;}}
+// filters
+const todayISO=new Intl.DateTimeFormat("en-CA",{timeZone:TZ}).format(new Date());
+let current=days.includes(todayISO)?todayISO:days[0];
+const qs=new URLSearchParams(location.search).get("day");
+if(qs){const m=days.find(d=>fmt(d+"T12:00:00+10:00",{weekday:"long"}).toLowerCase().startsWith(qs.toLowerCase()));if(m)current=m;}
+function renderFilters(){
+  $("#dayFilters").innerHTML=days.map(d=>{const n=sessions.filter(x=>x.s.date===d).length;
+    return `<button type="button" data-day="${d}" aria-pressed="${d===current}">${fmt(d+"T12:00:00+10:00",{weekday:"long"})}<small>${fmt(d+"T12:00:00+10:00",{day:"numeric",month:"short"})} · ${n} open${n===1?"":"s"}</small></button>`}).join("");
+}
+$("#dayFilters").addEventListener("click",e=>{const b=e.target.closest("button[data-day]");if(!b)return;current=b.dataset.day;renderFilters();renderList();});
+// list
+let openId=null;
+function cols(){return window.matchMedia("(min-width:1024px)").matches?3:window.matchMedia("(min-width:640px)").matches?2:1}
+function renderList(){
+  const list=sessions.filter(x=>x.s.date===current);
+  $("#dayHeading").textContent=dayLabel(current);
+  const props=new Set(list.map(x=>x.p.id)).size;
+  $("#dayCount").textContent=`${list.length} inspection${list.length===1?"":"s"} · ${props} propert${props===1?"y":"ies"}`;
+  const now=Date.now();
+  $("#openList").innerHTML=list.map((x,i)=>{const p=x.p,s=x.s,done=new Date(s.end).getTime()<now;
+    const other=p.sessions.filter(o=>o.start!==s.start);
+    const g0=p.media.gallery[0];
+    const thumb=g0?`<img class="thumb" src="media/${p.id}/thumb.webp" srcset="media/${p.id}/thumb.webp 480w, ${esc(g0.s)} 800w" sizes="(min-width:1024px) 380px, (min-width:640px) 48vw, 120px" alt="" loading="${i<6?"eager":"lazy"}" decoding="async" width="480" height="360">`:`<span class="thumb"></span>`;
+    return `<div class="row${done?" done":""}" data-idx="${i}" data-id="${p.id}" id="r-${p.id}-${s.start.slice(0,10)}">
+      <button type="button" class="row-btn" aria-expanded="false" aria-controls="detail">
+        <span class="ph">${thumb}<span class="num" aria-label="Guide number ${p.number}">${p.number}</span></span>
+        <span class="txt"><span class="time">${range(s)}</span>${done?'<span class="badge">Finished</span>':""}${other.length?`<span class="badge gold">+${other.length} more</span>`:""}
+          <span class="addr">${esc(p.streetAddress)}</span><span class="sub">${esc(p.suburb)}</span>
+          <span class="price">${esc(p.priceDisplay)}</span><span class="facts">${facts(p)}</span></span>
+        <span class="chev" aria-hidden="true">›</span>
+      </button></div>`}).join("")||`<p style="text-align:center;padding:30px">No verified open homes for this day.</p>`;
+  openId=null;
+}
+function detailHTML(p,s){
+  const g=p.media.gallery;
+  const imgs=g.map((m,i)=>`<img src="${m.s}" alt="${esc(p.streetAddress)} photo ${i+1} of ${g.length}" loading="${i<2?"eager":"lazy"}" decoding="async" width="800" height="533" data-i="${i}">`).join("");
+  const sess=p.sessions.map(o=>`<li>${fmt(o.start,{weekday:"long",day:"numeric",month:"long"})}, ${range(o)}</li>`).join("");
+  const E=G.enquiries||{};
+  const enq=`${esc(E.name||"")}${E.phone?`<br><a href="tel:${esc(E.phone.replace(/\s/g,""))}">${esc(E.phone)}</a>`:""}${E.email?`<br><a href="mailto:${esc(E.email)}?subject=${encodeURIComponent("Enquiry: "+p.streetAddress+", "+p.suburb)}">${esc(E.email)}</a>`:""}`;
+  const plan=p.media.plans[0];
+  return `<div class="detail" id="detail" role="region" aria-label="${esc(p.streetAddress)} details">
+    <div class="d-grid">
+      <div>
+        ${g.length?`<div class="gallery"><div class="g-track" tabindex="0" aria-label="Photo gallery">${imgs}</div>
+          <button type="button" class="g-nav prev" aria-label="Previous photo">‹</button><button type="button" class="g-nav next" aria-label="Next photo">›</button>
+          <button type="button" class="g-all">View all photos</button><span class="g-count">1 / ${g.length}</span></div>`:""}
+      </div>
+      <div class="info">
+        <p class="big-price">${esc(p.priceDisplay)}</p>
+        <dl>
+          <dt>Open home${p.sessions.length>1?"s":""}</dt><dd><ul class="sessions">${sess}</ul></dd>
+          <dt>Property</dt><dd class="facts">${facts(p)}</dd>
+          <dt>Enquiries</dt><dd>${enq||"—"}</dd>
+          <dt>Office</dt><dd>${esc(p.office)}</dd>
+        </dl>
+        <div class="actions"><a class="btn dark" href="${esc(p.listingUrl)}" target="_blank" rel="noopener">View listing</a>${plan?'<button type="button" class="btn open-plan">Floor plan</button>':""}${E.phone?`<a class="btn accent" href="tel:${esc(E.phone.replace(/\s/g,""))}">Enquire with ${esc((E.name||"").split(" ")[0])}</a>`:""}</div>
+        ${plan?`<button type="button" class="plan-thumb open-plan" aria-label="Open floor plan"><img src="${plan.u}" alt="Floor plan for ${esc(p.streetAddress)}" loading="lazy"><span>Tap to enlarge &amp; zoom</span></button>`:""}
+      </div>
+    </div></div>`;
+}
+function closeDetail(){const d=$("#detail");if(d)d.remove();document.querySelectorAll('.row-btn[aria-expanded="true"]').forEach(b=>b.setAttribute("aria-expanded","false"));openId=null;}
+$("#openList").addEventListener("click",e=>{
+  const btn=e.target.closest(".row-btn");
+  if(btn){const row=btn.parentElement,key=row.id;
+    if(openId===key){closeDetail();return;}
+    closeDetail();
+    const list=sessions.filter(x=>x.s.date===current),idx=+row.dataset.idx,x=list[idx];
+    // insert after the last row of this visual line
+    const rows=[...document.querySelectorAll("#openList .row")];const c=cols();
+    const anchor=rows[Math.min(rows.length-1,Math.floor(idx/c)*c+c-1)];
+    anchor.insertAdjacentHTML("afterend",detailHTML(x.p,x.s));
+    btn.setAttribute("aria-expanded","true");openId=key;wireDetail(x.p);
+    row.scrollIntoView({behavior:"smooth",block:"start"});return;}
+});
+function wireDetail(p){
+  const d=$("#detail"),t=d.querySelector(".g-track"),c=d.querySelector(".g-count");
+  if(t){const n=p.media.gallery.length;
+    const cur=()=>Math.round(t.scrollLeft/t.clientWidth);
+    t.addEventListener("scroll",()=>{c.textContent=(cur()+1)+" / "+n},{passive:true});
+    d.querySelector(".g-nav.prev").onclick=()=>t.scrollTo({left:Math.max(0,cur()-1)*t.clientWidth,behavior:"smooth"});
+    d.querySelector(".g-nav.next").onclick=()=>t.scrollTo({left:Math.min(n-1,cur()+1)*t.clientWidth,behavior:"smooth"});
+    t.addEventListener("click",e=>{const im=e.target.closest("img");if(im)openPhotos(p,+im.dataset.i)});
+    d.querySelector(".g-all").onclick=()=>openPhotos(p,cur());
+    t.addEventListener("keydown",e=>{if(e.key==="ArrowRight")d.querySelector(".g-nav.next").click();if(e.key==="ArrowLeft")d.querySelector(".g-nav.prev").click();});
+  }
+  d.querySelectorAll(".open-plan").forEach(b=>b.onclick=()=>openPlan(p));
+}
+// photo viewer
+const pd=$("#photoDialog"),pt=$("#photoTrack");
+function openPhotos(p,i){
+  const g=p.media.gallery;$("#photoTitle").textContent=p.streetAddress+", "+p.suburb;
+  pt.innerHTML=g.map((m,k)=>`<img src="${Math.abs(k-i)<=1?m.l:""}" data-src="${m.l}" alt="${esc(p.streetAddress)} photo ${k+1}" decoding="async">`).join("");
+  pd.showModal();requestAnimationFrame(()=>{pt.scrollLeft=i*pt.clientWidth;upd();});
+  function upd(){const k=Math.round(pt.scrollLeft/pt.clientWidth);$("#photoCount").textContent=(k+1)+" / "+g.length;
+    [k-1,k,k+1,k+2].forEach(j=>{const im=pt.children[j];if(im&&!im.getAttribute("src"))im.src=im.dataset.src;});}
+  pt.onscroll=upd;
+}
+pd.addEventListener("click",e=>{const s=e.target.closest("[data-step]");if(s){const k=Math.round(pt.scrollLeft/pt.clientWidth)+(+s.dataset.step);pt.scrollTo({left:k*pt.clientWidth,behavior:"smooth"});}
+  if(e.target.closest("[data-close]"))pd.close();});
+pd.addEventListener("keydown",e=>{if(e.key==="ArrowRight")pd.querySelector(".next").click();if(e.key==="ArrowLeft")pd.querySelector(".prev").click();});
+// floor plan viewer with pinch zoom
+const fd=$("#planDialog"),stage=$("#planStage"),img=$("#planImg");
+let sc=1,fit=1,tx=0,ty=0,gest={multi:false,moved:0,x:0,y:0};const ptrs=new Map();let pinch=null,last=null;
+function apply(){const w=img.naturalWidth*sc,h=img.naturalHeight*sc,W=stage.clientWidth,H=stage.clientHeight;
+  tx=w<=W?(W-w)/2:Math.min(0,Math.max(W-w,tx));ty=h<=H?(H-h)/2:Math.min(0,Math.max(H-h,ty));
+  img.style.transform=`translate(${tx}px,${ty}px) scale(${sc})`;}
+function fitPlan(){fit=Math.min(stage.clientWidth/img.naturalWidth,stage.clientHeight/img.naturalHeight);sc=fit;tx=ty=0;apply();}
+function zoomAt(f,cx,cy){const ns=Math.min(fit*8,Math.max(fit,sc*f));tx=cx-(cx-tx)*ns/sc;ty=cy-(cy-ty)*ns/sc;sc=ns;apply();}
+function openPlan(p){const pl=p.media.plans[0];$("#planTitle").textContent="Floor plan – "+p.streetAddress;img.alt="Floor plan for "+p.streetAddress;
+  fd.showModal();img.onload=()=>fitPlan();img.src=pl.u;if(img.complete&&img.naturalWidth)fitPlan();}
+fd.addEventListener("click",e=>{const z=e.target.closest("[data-zoom]");if(z){const v=+z.dataset.zoom;if(v===0)fitPlan();else zoomAt(v>0?1.5:1/1.5,stage.clientWidth/2,stage.clientHeight/2);}
+  if(e.target.closest("[data-close]"))fd.close();});
+stage.addEventListener("pointerdown",e=>{try{stage.setPointerCapture(e.pointerId)}catch(_){};ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===1)gest={multi:false,moved:0,x:e.clientX,y:e.clientY};else gest.multi=true;
+  if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y)};}else last={x:e.clientX,y:e.clientY};});
+stage.addEventListener("pointermove",e=>{if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  const r=stage.getBoundingClientRect();
+  if(ptrs.size===2&&pinch){const [a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);zoomAt(d/pinch.d,(a.x+b.x)/2-r.left,(a.y+b.y)/2-r.top);pinch.d=d;}
+  else if(ptrs.size===1&&last){tx+=e.clientX-last.x;ty+=e.clientY-last.y;last={x:e.clientX,y:e.clientY};apply();}});
+const up=e=>{ptrs.delete(e.pointerId);if(ptrs.size<2)pinch=null;if(ptrs.size===1){const v=[...ptrs.values()][0];last={x:v.x,y:v.y};}else last=null;};
+stage.addEventListener("pointerup",up);stage.addEventListener("pointercancel",up);
+stage.addEventListener("wheel",e=>{e.preventDefault();const r=stage.getBoundingClientRect();zoomAt(e.deltaY<0?1.15:1/1.15,e.clientX-r.left,e.clientY-r.top);},{passive:false});
+let lastTap=0;
+stage.addEventListener("pointermove",e=>{if(ptrs.size===1)gest.moved=Math.max(gest.moved,Math.hypot(e.clientX-gest.x,e.clientY-gest.y));});
+stage.addEventListener("pointerup",e=>{if(ptrs.size>0)return;if(gest.multi||gest.moved>10){lastTap=0;return;}
+  const t=Date.now();if(t-lastTap<320){const r=stage.getBoundingClientRect();if(sc>fit*1.05)fitPlan();else zoomAt(2.5,e.clientX-r.left,e.clientY-r.top);lastTap=0;}else lastTap=t;});
+window.addEventListener("resize",()=>{if(fd.open)fitPlan();});
+renderFilters();renderList();
+})();
